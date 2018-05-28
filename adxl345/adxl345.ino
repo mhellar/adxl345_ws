@@ -4,6 +4,18 @@
 
 #include <ArduinoJson.h>
 
+#include <WiFi.h>
+#include <WiFiUdp.h>
+#include <OSCMessage.h>
+
+char ssid[] = "Wired2";          // your network SSID (name)
+char pass[] = "12!trout";                    // your network password
+
+WiFiUDP Udp;                                // A UDP instance to let us send and receive packets over UDP
+const IPAddress outIp(10,0,0,124);        // remote IP of your computer
+const unsigned int outPort = 9999;          // remote port to receive OSC
+const unsigned int localPort = 8888;        // local port to listen for OSC packets (actually not used for sending)
+
 /* Assign a unique ID to this sensor at the same time */
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 
@@ -111,7 +123,33 @@ void displayRange(void)
 
 void setup(void) 
 {
-  Serial.begin(9600);
+    Serial.begin(115200);
+
+    // Connect to WiFi network
+    Serial.println();
+    Serial.println();
+    Serial.print("Connecting to ");
+    Serial.println(ssid);
+    WiFi.begin(ssid, pass);
+
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("");
+
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+
+    Serial.println("Starting UDP");
+    Udp.begin(localPort);
+    Serial.print("Local port: ");
+#ifdef ESP32
+    Serial.println(localPort);
+#else
+    Serial.println(Udp.localPort());
+#endif
   Serial.println("Accelerometer Test"); Serial.println("");
   
   /* Initialise the sensor */
@@ -152,22 +190,20 @@ void loop(void)
   root["z"] = event.acceleration.z;
 
   root.printTo(Serial);
+   
+  String output;
+  root.printTo(output);
   // This prints:
   // {"sensor":"gps","time":1351824120,"data":[48.756080,2.302038]}
 
   Serial.println();
 
-//  root.prettyPrintTo(Serial);
-  // This prints:
-  // {
-  //   "sensor": "gps",
-  //   "time": 1351824120,
-  //   "data": [
-  //     48.756080,
-  //     2.302038
-  //   ]
-  // }
- 
-
-  delay(100);
+    OSCMessage msg("/accel");
+    msg.add(output);
+    Udp.beginPacket(outIp, outPort);
+    msg.send(Udp);
+    Udp.endPacket();
+    msg.empty();
+    
+  delay(50);
 }
